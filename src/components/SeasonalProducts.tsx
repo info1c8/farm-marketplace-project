@@ -65,29 +65,11 @@ const SeasonalProducts = () => {
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-montserrat font-bold text-gray-800 mb-4">
-            Сезонные продукты
+            Каталог продуктов
           </h2>
           <p className="text-lg text-gray-600 font-open-sans max-w-2xl mx-auto mb-8">
-            Самые свежие продукты по сезону. Предзаказывайте лучшие урожаи
-            заранее
+            Свежие органические продукты прямо с фермы
           </p>
-
-          <div className="flex flex-wrap justify-center gap-4 mb-8">
-            {seasons.map((season) => (
-              <Button
-                key={season.name}
-                variant={season.active ? "default" : "outline"}
-                className={`${season.active ? "bg-primary hover:bg-primary-600" : ""}`}
-              >
-                <Icon
-                  name={season.icon as any}
-                  size={16}
-                  className={`mr-2 ${season.color}`}
-                />
-                {season.name}
-              </Button>
-            ))}
-          </div>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -101,7 +83,7 @@ const SeasonalProducts = () => {
             variant="outline"
             className="border-primary text-primary hover:bg-primary hover:text-white"
           >
-            Посмотреть все сезонные продукты
+            Показать больше продуктов
           </Button>
         </div>
       </div>

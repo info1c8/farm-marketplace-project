@@ -11,7 +11,7 @@ const Header = () => {
               <Icon name="Sprout" className="text-white" size={24} />
             </div>
             <h1 className="text-2xl font-montserrat font-bold text-gray-800">
-              ФермаМаркет
+              FarmMarket
             </h1>
           </div>
 
@@ -20,39 +20,30 @@ const Header = () => {
               href="#"
               className="text-gray-600 hover:text-primary transition-colors font-open-sans"
             >
-              Главная
+              Home
             </a>
             <a
               href="#"
               className="text-gray-600 hover:text-primary transition-colors font-open-sans"
             >
-              Фермеры
+              Products
             </a>
             <a
               href="#"
               className="text-gray-600 hover:text-primary transition-colors font-open-sans"
             >
-              Продукты
-            </a>
-            <a
-              href="#"
-              className="text-gray-600 hover:text-primary transition-colors font-open-sans"
-            >
-              Доставка
+              Farmers
             </a>
           </nav>
 
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="sm">
-              <Icon name="Search" size={20} />
-            </Button>
             <Button variant="ghost" size="sm" className="relative">
               <Icon name="ShoppingCart" size={20} />
               <span className="absolute -top-2 -right-2 bg-accent text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                3
+                0
               </span>
             </Button>
-            <Button className="bg-primary hover:bg-primary-600">Войти</Button>
+            <Button className="bg-primary hover:bg-primary-600">Login</Button>
           </div>
         </div>
       </div>
