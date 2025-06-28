@@ -18,9 +18,9 @@ const productSchema = new mongoose.Schema({
     required: true
   },
   category: {
-    type: String,
-    required: [true, 'Категория обязательна'],
-    enum: ['vegetables', 'fruits', 'dairy', 'meat', 'grains', 'herbs', 'honey', 'eggs', 'nuts', 'berries']
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: true
   },
   subcategory: {
     type: String,

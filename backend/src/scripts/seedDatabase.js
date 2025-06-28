@@ -24,58 +24,62 @@ const connectDB = async () => {
 };
 
 // Sample data
-const sampleUsers = [
-  {
-    firstName: 'Михаил',
-    lastName: 'Иванов',
-    email: 'mikhail.ivanov@example.com',
-    password: await bcrypt.hash('password123', 12),
-    phone: '+7-900-123-45-67',
-    role: 'farmer',
-    isVerified: true,
-    isActive: true
-  },
-  {
-    firstName: 'Анна',
-    lastName: 'Петрова',
-    email: 'anna.petrova@example.com',
-    password: await bcrypt.hash('password123', 12),
-    phone: '+7-900-234-56-78',
-    role: 'farmer',
-    isVerified: true,
-    isActive: true
-  },
-  {
-    firstName: 'Сергей',
-    lastName: 'Козлов',
-    email: 'sergey.kozlov@example.com',
-    password: await bcrypt.hash('password123', 12),
-    phone: '+7-900-345-67-89',
-    role: 'farmer',
-    isVerified: true,
-    isActive: true
-  },
-  {
-    firstName: 'Елена',
-    lastName: 'Смирнова',
-    email: 'elena.smirnova@example.com',
-    password: await bcrypt.hash('password123', 12),
-    phone: '+7-900-456-78-90',
-    role: 'customer',
-    isVerified: true,
-    isActive: true
-  },
-  {
-    firstName: 'Администратор',
-    lastName: 'Системы',
-    email: 'admin@fermamarket.ru',
-    password: await bcrypt.hash('admin123', 12),
-    phone: '+7-900-000-00-00',
-    role: 'admin',
-    isVerified: true,
-    isActive: true
-  }
-];
+const createSampleUsers = async () => {
+  const users = [
+    {
+      firstName: 'Михаил',
+      lastName: 'Иванов',
+      email: 'mikhail.ivanov@example.com',
+      password: await bcrypt.hash('password123', 12),
+      phone: '+7-900-123-45-67',
+      role: 'farmer',
+      isVerified: true,
+      isActive: true
+    },
+    {
+      firstName: 'Анна',
+      lastName: 'Петрова',
+      email: 'anna.petrova@example.com',
+      password: await bcrypt.hash('password123', 12),
+      phone: '+7-900-234-56-78',
+      role: 'farmer',
+      isVerified: true,
+      isActive: true
+    },
+    {
+      firstName: 'Сергей',
+      lastName: 'Козлов',
+      email: 'sergey.kozlov@example.com',
+      password: await bcrypt.hash('password123', 12),
+      phone: '+7-900-345-67-89',
+      role: 'farmer',
+      isVerified: true,
+      isActive: true
+    },
+    {
+      firstName: 'Елена',
+      lastName: 'Смирнова',
+      email: 'elena.smirnova@example.com',
+      password: await bcrypt.hash('password123', 12),
+      phone: '+7-900-456-78-90',
+      role: 'customer',
+      isVerified: true,
+      isActive: true
+    },
+    {
+      firstName: 'Администратор',
+      lastName: 'Системы',
+      email: 'admin@fermamarket.ru',
+      password: await bcrypt.hash('admin123', 12),
+      phone: '+7-900-000-00-00',
+      role: 'admin',
+      isVerified: true,
+      isActive: true
+    }
+  ];
+
+  return await User.create(users);
+};
 
 const sampleCategories = [
   {
@@ -195,7 +199,7 @@ const samplePickupPoints = [
   }
 ];
 
-const samplePromoCodes = [
+const createSamplePromoCodes = (adminUserId) => [
   {
     code: 'WELCOME10',
     name: 'Скидка для новых пользователей',
@@ -213,7 +217,8 @@ const samplePromoCodes = [
     userRestrictions: {
       newUsersOnly: true
     },
-    isActive: true
+    isActive: true,
+    createdBy: adminUserId
   },
   {
     code: 'ORGANIC20',
@@ -229,7 +234,8 @@ const samplePromoCodes = [
     },
     validFrom: new Date(),
     validUntil: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days
-    isActive: true
+    isActive: true,
+    createdBy: adminUserId
   },
   {
     code: 'FREESHIP',
@@ -244,7 +250,8 @@ const samplePromoCodes = [
     },
     validFrom: new Date(),
     validUntil: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
-    isActive: true
+    isActive: true,
+    createdBy: adminUserId
   }
 ];
 
@@ -263,7 +270,7 @@ const seedDatabase = async () => {
     console.log('🗑️ Очистили существующие данные');
 
     // Create users
-    const users = await User.create(sampleUsers);
+    const users = await createSampleUsers();
     console.log('👥 Создали пользователей:', users.length);
 
     // Create categories
@@ -351,10 +358,7 @@ const seedDatabase = async () => {
     console.log('📍 Создали точки выдачи:', pickupPoints.length);
 
     // Create promo codes
-    const promoCodesData = samplePromoCodes.map(promo => ({
-      ...promo,
-      createdBy: users[4]._id // Admin user
-    }));
+    const promoCodesData = createSamplePromoCodes(users[4]._id); // Admin user
     const promoCodes = await PromoCode.create(promoCodesData);
     console.log('🎫 Создали промокоды:', promoCodes.length);
 
@@ -364,7 +368,7 @@ const seedDatabase = async () => {
         name: 'Помидоры черри',
         description: 'Сладкие органические помидоры черри, выращенные в теплице.',
         farmer: farmers[0]._id,
-        category: 'vegetables',
+        category: categories[0]._id, // Овощи
         price: { amount: 350, unit: 'kg' },
         images: [{
           url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400&h=300&fit=crop',
@@ -381,7 +385,7 @@ const seedDatabase = async () => {
         name: 'Молоко коровье',
         description: 'Свежее цельное молоко от коров, пасущихся на экологически чистых лугах.',
         farmer: farmers[1]._id,
-        category: 'dairy',
+        category: categories[2]._id, // Молочные продукты
         price: { amount: 80, unit: 'l' },
         images: [{
           url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400&h=300&fit=crop',
@@ -398,7 +402,7 @@ const seedDatabase = async () => {
         name: 'Яблоки Антоновка',
         description: 'Классические русские яблоки сорта Антоновка.',
         farmer: farmers[2]._id,
-        category: 'fruits',
+        category: categories[1]._id, // Фрукты
         price: { amount: 120, unit: 'kg' },
         images: [{
           url: 'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&h=300&fit=crop',

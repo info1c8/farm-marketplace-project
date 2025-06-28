@@ -10,6 +10,7 @@ import {
   updateUserRole
 } from '../controllers/userController.js';
 import { protect, restrictTo } from '../middleware/auth.js';
+import { uploadAvatar as uploadAvatarMiddleware } from '../middleware/upload.js';
 import { body } from 'express-validator';
 
 const router = express.Router();
@@ -32,7 +33,7 @@ router.patch('/change-password', [
 ], changePassword);
 
 // Avatar upload
-router.post('/avatar', uploadAvatar);
+router.post('/avatar', uploadAvatarMiddleware, uploadAvatar);
 
 // Account management
 router.delete('/account', [

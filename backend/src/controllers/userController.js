@@ -1,5 +1,8 @@
 import User from '../models/User.js';
 import Farmer from '../models/Farmer.js';
+import Order from '../models/Order.js';
+import Review from '../models/Review.js';
+import mongoose from 'mongoose';
 import { validationResult } from 'express-validator';
 
 // Get user profile
@@ -189,10 +192,6 @@ export const getUserStats = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Import models here to avoid circular dependency
-    const Order = (await import('../models/Order.js')).default;
-    const Review = (await import('../models/Review.js')).default;
-
     const stats = {
       totalOrders: 0,
       totalSpent: 0,
@@ -202,7 +201,7 @@ export const getUserStats = async (req, res) => {
 
     // Get order statistics
     const orderStats = await Order.aggregate([
-      { $match: { customer: mongoose.Types.ObjectId(userId) } },
+      { $match: { customer: new mongoose.Types.ObjectId(userId) } },
       {
         $group: {
           _id: null,
@@ -222,7 +221,7 @@ export const getUserStats = async (req, res) => {
 
     // Get favorite categories
     const categoryStats = await Order.aggregate([
-      { $match: { customer: mongoose.Types.ObjectId(userId) } },
+      { $match: { customer: new mongoose.Types.ObjectId(userId) } },
       { $unwind: '$items' },
       {
         $lookup: {

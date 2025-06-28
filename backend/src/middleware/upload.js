@@ -1,24 +1,33 @@
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Ensure upload directories exist
+const ensureDirectoryExists = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+};
+
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    let uploadPath = 'uploads/';
+    let uploadPath = path.join(__dirname, '../../uploads/');
     
     if (file.fieldname === 'avatar') {
-      uploadPath += 'avatars/';
+      uploadPath = path.join(uploadPath, 'avatars/');
     } else if (file.fieldname === 'productImages') {
-      uploadPath += 'products/';
+      uploadPath = path.join(uploadPath, 'products/');
     } else if (file.fieldname === 'certificates') {
-      uploadPath += 'certificates/';
+      uploadPath = path.join(uploadPath, 'certificates/');
     }
     
-    cb(null, path.join(__dirname, '../../', uploadPath));
+    ensureDirectoryExists(uploadPath);
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);

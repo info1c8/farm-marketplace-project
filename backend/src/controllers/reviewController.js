@@ -121,7 +121,7 @@ export const getProductReviews = async (req, res) => {
 
     // Get rating distribution
     const ratingStats = await Review.aggregate([
-      { $match: { product: mongoose.Types.ObjectId(productId), isVisible: true } },
+      { $match: { product: new mongoose.Types.ObjectId(productId), isVisible: true } },
       {
         $group: {
           _id: '$rating',
@@ -365,7 +365,7 @@ export const respondToReview = async (req, res) => {
 const updateProductRating = async (productId) => {
   try {
     const stats = await Review.aggregate([
-      { $match: { product: mongoose.Types.ObjectId(productId), isVisible: true } },
+      { $match: { product: new mongoose.Types.ObjectId(productId), isVisible: true } },
       {
         $group: {
           _id: null,
@@ -391,7 +391,7 @@ const updateProductRating = async (productId) => {
 const updateFarmerRating = async (farmerId) => {
   try {
     const stats = await Review.aggregate([
-      { $match: { farmer: mongoose.Types.ObjectId(farmerId), isVisible: true } },
+      { $match: { farmer: new mongoose.Types.ObjectId(farmerId), isVisible: true } },
       {
         $group: {
           _id: null,
