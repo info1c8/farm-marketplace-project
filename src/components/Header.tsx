@@ -13,6 +13,9 @@ const Header = () => {
     { name: "Каталог", href: "/catalog" },
     { name: "Фермеры", href: "/farmers" },
     { name: "О нас", href: "/about" },
+    { name: "Как купить", href: "/how-to-buy" },
+    { name: "Акции", href: "/promotions" },
+    { name: "Блог", href: "/blog" },
     { name: "Контакты", href: "/contacts" }
   ];
 
@@ -38,12 +41,12 @@ const Header = () => {
           </Link>
 
           {/* Навигация для десктопа */}
-          <nav className="hidden lg:flex items-center space-x-8">
+          <nav className="hidden lg:flex items-center space-x-6">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`font-open-sans transition-colors ${
+                className={`font-open-sans transition-colors text-sm ${
                   isActive(item.href)
                     ? "text-primary font-semibold"
                     : "text-gray-600 hover:text-primary"
