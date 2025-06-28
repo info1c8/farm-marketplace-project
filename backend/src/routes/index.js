@@ -5,6 +5,7 @@ import farmerRoutes from './farmerRoutes.js';
 import productRoutes from './productRoutes.js';
 import orderRoutes from './orderRoutes.js';
 import reviewRoutes from './reviewRoutes.js';
+import pickupRoutes from './pickupRoutes.js';
 
 const router = express.Router();
 
@@ -15,6 +16,7 @@ router.use('/v1/farmers', farmerRoutes);
 router.use('/v1/products', productRoutes);
 router.use('/v1/orders', orderRoutes);
 router.use('/v1/reviews', reviewRoutes);
+router.use('/v1/pickup-points', pickupRoutes);
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -28,8 +30,10 @@ router.get('/', (req, res) => {
       farmers: '/api/v1/farmers',
       products: '/api/v1/products',
       orders: '/api/v1/orders',
-      reviews: '/api/v1/reviews'
-    }
+      reviews: '/api/v1/reviews',
+      pickupPoints: '/api/v1/pickup-points'
+    },
+    documentation: 'https://github.com/farm-marketplace/api-docs'
   });
 });
 
