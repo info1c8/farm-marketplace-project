@@ -3,14 +3,31 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import session from 'express-session';
+import ConnectRedis from 'connect-redis';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createServer } from 'http';
 
 import connectDB from './config/database.js';
+import { connectRedis, redisClient } from './config/redis.js';
+import { specs, swaggerUi } from './config/swagger.js';
 import errorHandler from './middleware/errorHandler.js';
 import { accessLogger, errorLogger, consoleLogger } from './middleware/logger.js';
+import { trackAnalytics } from './middleware/analytics.js';
+import { 
+  mongoSanitization, 
+  xssProtection, 
+  hppProtection, 
+  securityHeaders,
+  requestSizeLimiter 
+} from './middleware/security.js';
 import routes from './routes/index.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
+import notificationService from './services/notificationService.js';
+import cronJobManager from './scripts/cronJobs.js';
+import emailService from './services/emailService.js';
 
 // Load environment variables
 dotenv.config();
@@ -19,23 +36,61 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 3000;
 
-// Connect to MongoDB
-connectDB();
+// Initialize services
+const initializeServices = async () => {
+  try {
+    // Connect to MongoDB
+    await connectDB();
+    
+    // Connect to Redis
+    await connectRedis();
+    
+    // Initialize WebSocket for notifications
+    if (process.env.WEBSOCKET_ENABLED === 'true') {
+      notificationService.initialize(server);
+    }
+    
+    // Verify email service
+    await emailService.verifyConnection();
+    
+    // Start cron jobs
+    if (process.env.NODE_ENV === 'production') {
+      cronJobManager.start();
+    }
+    
+    console.log('✅ All services initialized successfully');
+  } catch (error) {
+    console.error('❌ Service initialization failed:', error);
+    process.exit(1);
+  }
+};
 
 // Trust proxy (for deployment behind reverse proxy)
 app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  }
 }));
+
+app.use(securityHeaders);
+app.use(requestSizeLimiter);
 app.use(compression());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   message: {
     status: 'error',
@@ -43,10 +98,29 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks and static files
+    return req.url === '/health' || req.url.startsWith('/static');
+  }
 });
 
-// Apply rate limiting to API routes
 app.use('/api/', limiter);
+
+// Session configuration
+if (redisClient) {
+  const RedisStore = ConnectRedis(session);
+  app.use(session({
+    store: new RedisStore({ client: redisClient }),
+    secret: process.env.SESSION_SECRET || 'your-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      maxAge: parseInt(process.env.SESSION_MAX_AGE) || 86400000 // 24 hours
+    }
+  }));
+}
 
 // CORS configuration
 const corsOptions = {
@@ -58,7 +132,6 @@ const corsOptions = {
       'http://127.0.0.1:5173'
     ].filter(Boolean);
 
-    // Allow requests with no origin (mobile apps, etc.)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.includes(origin)) {
@@ -69,8 +142,8 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['X-Total-Count']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-API-Key'],
+  exposedHeaders: ['X-Total-Count', 'X-Rate-Limit-Remaining']
 };
 
 app.use(cors(corsOptions));
@@ -79,79 +152,130 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Security middleware
+app.use(mongoSanitization);
+app.use(xssProtection);
+app.use(hppProtection);
+
 // Logging middleware
 app.use(accessLogger);
 app.use(errorLogger);
 app.use(consoleLogger);
 
+// Analytics tracking
+app.use(trackAnalytics);
+
 // Serve static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/static', express.static(path.join(__dirname, '../public')));
+
+// API Documentation
+if (process.env.API_DOCS_ENABLED === 'true') {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'Farm Marketplace API Documentation'
+  }));
+}
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
+app.get('/health', async (req, res) => {
+  try {
+    const health = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      services: {
+        database: 'connected',
+        redis: redisClient ? 'connected' : 'disconnected',
+        email: await emailService.verifyConnection() ? 'connected' : 'disconnected'
+      },
+      version: '2.0.0'
+    };
+
+    res.status(200).json(health);
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: error.message
+    });
+  }
+});
+
+// System info endpoint (admin only)
+app.get('/system-info', (req, res) => {
+  res.json({
     status: 'success',
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    uptime: process.uptime(),
-    memory: process.memoryUsage()
+    data: {
+      nodeVersion: process.version,
+      platform: process.platform,
+      architecture: process.arch,
+      cpuUsage: process.cpuUsage(),
+      memoryUsage: process.memoryUsage(),
+      uptime: process.uptime(),
+      loadAverage: require('os').loadavg(),
+      cronJobs: cronJobManager.getJobStatus()
+    }
   });
 });
 
 // API routes
 app.use('/api', routes);
+app.use('/api/v1/analytics', analyticsRoutes);
 
-// Serve API documentation (if available)
-app.get('/docs', (req, res) => {
+// Webhook endpoints (before error handling)
+app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const signature = req.headers['stripe-signature'];
+    const paymentService = (await import('./services/paymentService.js')).default;
+    
+    const result = await paymentService.handleWebhook(signature, req.body);
+    res.json(result);
+  } catch (error) {
+    console.error('Stripe webhook error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// API info endpoint
+app.get('/api', (req, res) => {
   res.json({
     status: 'success',
-    message: 'API Documentation',
-    version: '1.0.0',
-    baseUrl: `${req.protocol}://${req.get('host')}/api/v1`,
+    message: 'Farm Marketplace API v2.0',
+    version: '2.0.0',
+    documentation: process.env.API_DOCS_ENABLED === 'true' ? '/api-docs' : null,
     endpoints: {
-      authentication: {
-        register: 'POST /auth/register',
-        login: 'POST /auth/login',
-        verifyEmail: 'GET /auth/verify-email/:token',
-        forgotPassword: 'POST /auth/forgot-password',
-        resetPassword: 'PATCH /auth/reset-password/:token',
-        getCurrentUser: 'GET /auth/me'
-      },
-      users: {
-        getProfile: 'GET /users/profile',
-        updateProfile: 'PATCH /users/profile',
-        changePassword: 'PATCH /users/change-password',
-        uploadAvatar: 'POST /users/avatar',
-        getUserStats: 'GET /users/stats'
-      },
-      farmers: {
-        getFarmers: 'GET /farmers',
-        getFarmer: 'GET /farmers/:id',
-        createProfile: 'POST /farmers/profile',
-        updateProfile: 'PATCH /farmers/profile',
-        getDashboard: 'GET /farmers/dashboard/stats'
-      },
-      products: {
-        getProducts: 'GET /products',
-        getProduct: 'GET /products/:id',
-        createProduct: 'POST /products',
-        updateProduct: 'PATCH /products/:id',
-        deleteProduct: 'DELETE /products/:id'
-      },
-      orders: {
-        createOrder: 'POST /orders',
-        getUserOrders: 'GET /orders/my-orders',
-        getOrder: 'GET /orders/:id',
-        updateStatus: 'PATCH /orders/:id/status',
-        cancelOrder: 'PATCH /orders/:id/cancel'
-      },
-      reviews: {
-        createReview: 'POST /reviews',
-        getProductReviews: 'GET /reviews/product/:productId',
-        getFarmerReviews: 'GET /reviews/farmer/:farmerId'
-      }
-    }
+      auth: '/api/v1/auth',
+      users: '/api/v1/users',
+      farmers: '/api/v1/farmers',
+      products: '/api/v1/products',
+      categories: '/api/v1/categories',
+      orders: '/api/v1/orders',
+      reviews: '/api/v1/reviews',
+      cart: '/api/v1/cart',
+      wishlist: '/api/v1/wishlist',
+      payments: '/api/v1/payments',
+      deliveries: '/api/v1/deliveries',
+      notifications: '/api/v1/notifications',
+      promoCodes: '/api/v1/promo-codes',
+      pickupPoints: '/api/v1/pickup-points',
+      analytics: '/api/v1/analytics'
+    },
+    features: [
+      'JWT Authentication',
+      'Real-time Notifications',
+      'Advanced Analytics',
+      'Image Processing',
+      'Payment Integration',
+      'Email Service',
+      'Caching System',
+      'Rate Limiting',
+      'Security Middleware',
+      'API Documentation',
+      'Automated Backups',
+      'Cron Jobs'
+    ]
   });
 });
 
@@ -160,7 +284,7 @@ app.all('*', (req, res) => {
   res.status(404).json({
     status: 'error',
     message: `Маршрут ${req.originalUrl} не найден`,
-    availableEndpoints: '/docs'
+    availableEndpoints: '/api'
   });
 });
 
@@ -168,29 +292,74 @@ app.all('*', (req, res) => {
 app.use(errorHandler);
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM получен. Завершение работы сервера...');
-  server.close(() => {
+const gracefulShutdown = (signal) => {
+  console.log(`🛑 ${signal} получен. Завершение работы сервера...`);
+  
+  server.close(async () => {
     console.log('🔌 HTTP сервер закрыт');
-    process.exit(0);
+    
+    try {
+      // Stop cron jobs
+      cronJobManager.stop();
+      
+      // Close database connection
+      await require('mongoose').connection.close();
+      console.log('🗄️ База данных отключена');
+      
+      // Close Redis connection
+      if (redisClient) {
+        await redisClient.quit();
+        console.log('🔴 Redis отключен');
+      }
+      
+      console.log('✅ Graceful shutdown completed');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Error during shutdown:', error);
+      process.exit(1);
+    }
   });
+  
+  // Force close after 30 seconds
+  setTimeout(() => {
+    console.error('⚠️ Принудительное завершение работы');
+    process.exit(1);
+  }, 30000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught Exception:', error);
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
 
-process.on('SIGINT', () => {
-  console.log('🛑 SIGINT получен. Завершение работы сервера...');
-  server.close(() => {
-    console.log('🔌 HTTP сервер закрыт');
-    process.exit(0);
-  });
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('UNHANDLED_REJECTION');
 });
 
 // Start server
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log(`🌍 Окружение: ${process.env.NODE_ENV}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`📚 API docs: http://localhost:${PORT}/docs`);
-  console.log(`🔗 API base URL: http://localhost:${PORT}/api/v1`);
-});
+const startServer = async () => {
+  try {
+    await initializeServices();
+    
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Сервер запущен на порту ${PORT}`);
+      console.log(`🌍 Окружение: ${process.env.NODE_ENV}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`📚 API docs: http://localhost:${PORT}/api-docs`);
+      console.log(`🔗 API base URL: http://localhost:${PORT}/api/v1`);
+      console.log(`⚡ WebSocket: ${process.env.WEBSOCKET_ENABLED === 'true' ? 'Enabled' : 'Disabled'}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;

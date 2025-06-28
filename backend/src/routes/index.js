@@ -36,8 +36,25 @@ router.use('/v1/pickup-points', pickupRoutes);
 router.get('/', (req, res) => {
   res.json({
     status: 'success',
-    message: 'Farm Marketplace API v1.0',
-    version: '1.0.0',
+    message: 'Farm Marketplace API v2.0',
+    version: '2.0.0',
+    features: [
+      'Enhanced Authentication & Authorization',
+      'Real-time Notifications via WebSocket',
+      'Advanced Caching with Redis',
+      'Comprehensive Analytics Dashboard',
+      'Automated Image Processing',
+      'Payment Integration (Stripe)',
+      'Email Service with Templates',
+      'Automated Cron Jobs',
+      'Advanced Security Middleware',
+      'API Rate Limiting',
+      'Swagger Documentation',
+      'Health Monitoring',
+      'Graceful Shutdown',
+      'Error Tracking',
+      'Performance Monitoring'
+    ],
     endpoints: {
       auth: '/api/v1/auth',
       users: '/api/v1/users',
@@ -52,9 +69,14 @@ router.get('/', (req, res) => {
       deliveries: '/api/v1/deliveries',
       notifications: '/api/v1/notifications',
       promoCodes: '/api/v1/promo-codes',
-      pickupPoints: '/api/v1/pickup-points'
+      pickupPoints: '/api/v1/pickup-points',
+      analytics: '/api/v1/analytics'
     },
-    documentation: 'https://github.com/farm-marketplace/api-docs'
+    documentation: process.env.API_DOCS_ENABLED === 'true' ? '/api-docs' : 'Documentation disabled',
+    websocket: process.env.WEBSOCKET_ENABLED === 'true' ? 'Enabled' : 'Disabled',
+    caching: 'Redis-powered caching system',
+    monitoring: 'Health checks and performance monitoring',
+    security: 'Advanced security middleware and rate limiting'
   });
 });
 
